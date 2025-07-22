@@ -17,23 +17,6 @@ public class ClientHandler implements Runnable {
         writer = new PrintWriter(socket.getOutputStream(), true);
     }
 
-//    public void run() {
-//        try {
-//            String name = reader.readLine(); // First line is the client's name
-//            broadcast(name + " has joined the chat.");
-//
-//            String message;
-//            while ((message = reader.readLine()) != null) {
-//                broadcast(name + ": " + message);
-//            }
-//        } catch (IOException e) {
-//            System.out.println("Client disconnected: " + socket);
-//        } finally {
-//            try {
-//                socket.close();
-//            } catch (IOException ignored) {}
-//        }
-//    }
 
     public void run() {
         try {
@@ -55,7 +38,11 @@ public class ClientHandler implements Runnable {
 
             String message;
             while ((message = reader.readLine()) != null) {
-                broadcast(username + ": " + message);
+//                broadcast(username + ": " + message);
+            	String decryptedMessage = util.AESEncryption.decrypt(message);
+            	System.out.println("Received (decrypted): " + decryptedMessage);
+            	broadcast(util.AESEncryption.encrypt(username + ": " + decryptedMessage));
+
             }
 
         } catch (IOException e) {
