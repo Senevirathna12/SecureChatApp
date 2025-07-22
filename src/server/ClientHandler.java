@@ -17,15 +17,47 @@ public class ClientHandler implements Runnable {
         writer = new PrintWriter(socket.getOutputStream(), true);
     }
 
+//    public void run() {
+//        try {
+//            String name = reader.readLine(); // First line is the client's name
+//            broadcast(name + " has joined the chat.");
+//
+//            String message;
+//            while ((message = reader.readLine()) != null) {
+//                broadcast(name + ": " + message);
+//            }
+//        } catch (IOException e) {
+//            System.out.println("Client disconnected: " + socket);
+//        } finally {
+//            try {
+//                socket.close();
+//            } catch (IOException ignored) {}
+//        }
+//    }
+
     public void run() {
         try {
-            String name = reader.readLine(); // First line is the client's name
-            broadcast(name + " has joined the chat.");
+            writer.println("Enter username:");
+            String username = reader.readLine();
+
+            writer.println("Enter password:");
+            String password = reader.readLine();
+
+            if (!UserAuth.authenticate(username, password)) {
+                writer.println("Authentication failed. Connection closed.");
+                socket.close();
+                return;
+            }
+
+            writer.println("Login successful. Welcome to the chat!");
+
+            broadcast(username + " has joined the chat.");
 
             String message;
             while ((message = reader.readLine()) != null) {
-                broadcast(name + ": " + message);
+                broadcast(username + ": " + message);
             }
+
         } catch (IOException e) {
             System.out.println("Client disconnected: " + socket);
         } finally {

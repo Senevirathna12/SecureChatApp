@@ -13,11 +13,7 @@ public class ChatClient {
 			BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
 			PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
 			try (Scanner scanner = new Scanner(System.in)) {
-				System.out.print("Enter your name: ");
-				String name = scanner.nextLine();
-				writer.println(name); // Send name first
-
-				// Listen for server messages
+				// Thread to receive and display server messages
 				new Thread(() -> {
 				    String serverMessage;
 				    try {
@@ -27,11 +23,14 @@ public class ChatClient {
 				    } catch (IOException ignored) {}
 				}).start();
 
-				// Send messages
+				// Thread to send user input
 				while (true) {
-				    String msg = scanner.nextLine();
-				    writer.println(msg);
+				    String userInput = scanner.nextLine().trim();
+				    if (!userInput.isEmpty()) {
+				        writer.println(userInput);
+				    }
 				}
+
 			}
 		}
     }
