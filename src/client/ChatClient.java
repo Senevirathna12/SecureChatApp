@@ -16,32 +16,29 @@ public class ChatClient {
 			try (Scanner scanner = new Scanner(System.in)) {
 				// Thread to receive and display server messages
 				new Thread(() -> {
-//				    String serverMessage;
 				    try {
-//				        while ((serverMessage = reader.readLine()) != null) {
-//				            System.out.println(serverMessage);
-//				        }
-				    	
-				        String encryptedMessage;
-				        while ((encryptedMessage = reader.readLine()) != null) {
-				            String decrypted = AESEncryption.decrypt(encryptedMessage);  // Decrypt after receiving
-				            System.out.println(decrypted);
+				        String serverMessage;
+				        while ((serverMessage = reader.readLine()) != null) {
+				            if (serverMessage.startsWith("[ENC]")) {
+				                String base64Data = serverMessage.substring(5); // Remove [ENC]
+				                String decrypted = AESEncryption.decrypt(base64Data);
+				                System.out.println(decrypted);
+				            } else {
+				                // Plain system messages
+				                System.out.println(serverMessage);
+				            }
 				        }
+
 
 				    } catch (IOException ignored) {}
 				}).start();
 
-				// Thread to send user input
-				while (true) {
-//				    String userInput = scanner.nextLine().trim();
-//				    if (!userInput.isEmpty()) {
-//				        writer.println(userInput);
-//				    }
-				    
+				while (true) {  
 				    String userInput = scanner.nextLine().trim();
 				    if (!userInput.isEmpty()) {
 				        String encrypted = AESEncryption.encrypt(userInput);  //  Encrypt before sending
 				        writer.println(encrypted);
+				        // System.out.println("input"+encrypted);
 				    }
 
 				}
