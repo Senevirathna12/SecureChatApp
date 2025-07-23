@@ -1,90 +1,99 @@
 package client;
 
-import util.AESEncryption;
+import util.*;
 
-import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.net.Socket;
-import java.security.KeyFactory;
-import java.security.PublicKey;
-import java.security.spec.X509EncodedKeySpec;
+import java.security.*;
 import java.util.Base64;
 import java.util.Scanner;
 
-import javax.crypto.Cipher;
-
 public class ChatClient {
-    private static final String HOST = "localhost";
-    private static final int PORT = 12345;
-
-    private static byte[] aesKey; // shared AES key for this client session
+    private static PublicKey serverPublicKey;
+    private static KeyPair clientKeyPair;
+    private static SecretKey aesKey;
 
     public static void main(String[] args) {
-        try (Socket socket = new Socket(HOST, PORT)) {
+        try (Socket socket = new Socket("localhost", 12345)) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter writer = new PrintWriter(socket.getOutputStream(), true);
-
-            // Step 1: Receive RSA Public Key from server
-            String publicKeyBase64 = reader.readLine();
-            byte[] publicKeyBytes = Base64.getDecoder().decode(publicKeyBase64);
-            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyBytes);
-            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-            PublicKey serverPublicKey = keyFactory.generatePublic(keySpec);
-
-            // Step 2: Generate AES key
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            keyGen.init(128); // 128-bit AES
-            SecretKey secretKey = keyGen.generateKey();
-            aesKey = secretKey.getEncoded(); // Store AES key
-
-            // Step 3: Encrypt AES key with server RSA public key
-            Cipher rsaCipher = Cipher.getInstance("RSA");
-            rsaCipher.init(Cipher.ENCRYPT_MODE, serverPublicKey);
-            byte[] encryptedAESKey = rsaCipher.doFinal(aesKey);
-            String encryptedAESKeyBase64 = Base64.getEncoder().encodeToString(encryptedAESKey);
-
-            // Step 4: Send encrypted AES key to server
-            writer.println(encryptedAESKeyBase64);
-            writer.flush();
-
+            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
             Scanner scanner = new Scanner(System.in);
 
-            // Step 5: Read login prompts
-            System.out.println(reader.readLine()); // "Enter username:"
+            clientKeyPair = RSAUtil.generateKeyPair();
+
+            // Receive server public key
+            serverPublicKey = RSAUtil.getPublicKeyFromBase64(reader.readLine());
+
+            // Send client's public key
+            writer.write(Base64.getEncoder().encodeToString(clientKeyPair.getPublic().getEncoded()));
+            writer.newLine();
+            writer.flush();
+
+            // Login
+            System.out.print(reader.readLine());
             String username = scanner.nextLine();
-            writer.println(AESEncryption.encrypt(username, aesKey));
+            writer.write(username);
+            writer.newLine();
+            writer.flush();
 
-            System.out.println(reader.readLine()); // "Enter password:"
+            System.out.print(reader.readLine());
             String password = scanner.nextLine();
-            writer.println(AESEncryption.encrypt(password, aesKey));
+            writer.write(password);
+            writer.newLine();
+            writer.flush();
 
-            // Step 6: Start listener for messages from server
+            String loginStatus = reader.readLine();
+            System.out.println(loginStatus);
+            if (!loginStatus.startsWith("Login successful")) return;
+
+            // Generate AES key and send it encrypted
+            aesKey = AESEncryption.generateAESKey();
+            String encryptedAES = RSAUtil.encryptAESKey(aesKey, serverPublicKey);
+            writer.write(encryptedAES);
+            writer.newLine();
+            writer.flush();
+
+            // Reader thread
             new Thread(() -> {
                 try {
-                    String serverMessage;
-                    while ((serverMessage = reader.readLine()) != null) {
-                        if (serverMessage.startsWith("[ENC]")) {
-                            String encryptedPayload = serverMessage.substring(5);
-                            String decrypted = AESEncryption.decrypt(encryptedPayload, aesKey);
-                            System.out.println(decrypted);
-                        } else {
-                            System.out.println(serverMessage); // System or error messages
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        String[] parts = line.split("::");
+                        if (parts.length != 3) continue;
+
+                        String encrypted = parts[0];
+                        String hmac = parts[1];
+                        String signature = parts[2];
+
+                        if (!HMACUtil.verifyHMAC(encrypted, aesKey, hmac)) {
+                            System.out.println("[!] HMAC check failed.");
+                            continue;
                         }
+
+                        String decrypted = AESEncryption.decrypt(encrypted, aesKey);
+                        if (!SignatureUtil.verify(decrypted, signature, serverPublicKey)) {
+                            System.out.println("[!] Signature check failed.");
+                            continue;
+                        }
+
+                        System.out.println(decrypted);
                     }
-                } catch (IOException e) {
-                    e.printStackTrace();
+                } catch (Exception e) {
+                    System.out.println("Disconnected from server.");
                 }
             }).start();
 
-            // Step 7: Send encrypted messages
+            // Writer loop
             while (true) {
-                String userInput = scanner.nextLine().trim();
-                if (!userInput.isEmpty()) {
-                    String encrypted = AESEncryption.encrypt(userInput, aesKey);
-                    writer.println(encrypted);
-                }
+                String msg = scanner.nextLine();
+                String encrypted = AESEncryption.encrypt(msg, aesKey);
+                String hmac = HMACUtil.generateHMAC(encrypted, aesKey);
+                String signature = SignatureUtil.sign(msg, clientKeyPair.getPrivate());
+
+                writer.write(encrypted + "::" + hmac + "::" + signature);
+                writer.newLine();
+                writer.flush();
             }
 
         } catch (Exception e) {

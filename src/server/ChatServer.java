@@ -1,41 +1,27 @@
 package server;
 
-
-import java.io.*;
 import util.RSAUtil;
-
-import java.net.*;
-import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.security.KeyPair;
+import java.util.HashMap;
 
 public class ChatServer {
     private static final int PORT = 12345;
-    private static Set<ClientHandler> clientHandlers = new HashSet<>();
+    public static KeyPair rsaKeyPair;
+    public static HashMap<String, ClientHandler> clients = new HashMap<>();
 
-    public static void main(String[] args) throws IOException {
-    	
-    	// Generate RSA keys once
-        try {
-            RSAUtil.generateKeyPair();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return; 
-        }
-
-        System.out.println("RSA Public Key (Base64):");
-        System.out.println(RSAUtil.getPublicKeyAsBase64());
-    	
+    public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-			System.out.println("Chat server started on port " + PORT);
+            rsaKeyPair = RSAUtil.generateKeyPair();
+            System.out.println("Server started. Waiting for clients...");
 
-			while (true) {
-			    Socket socket = serverSocket.accept();
-			    System.out.println("New client connected: " + socket);
-
-			    ClientHandler clientHandler = new ClientHandler(socket, clientHandlers);
-			    clientHandlers.add(clientHandler);
-			    new Thread(clientHandler).start();
-			}
-		}
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                new Thread(new ClientHandler(clientSocket, rsaKeyPair)).start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

@@ -1,77 +1,131 @@
 package server;
 
+import util.AESEncryption;
+import util.HMACUtil;
+import util.RSAUtil;
+import util.SignatureUtil;
+import server.UserAuth;
+
 import java.io.*;
-import java.net.*;
-import java.util.*;
+import java.net.Socket;
+import java.security.*;
 import java.util.Base64;
 
-import util.AESEncryption;
-import util.RSAUtil;
+import javax.crypto.SecretKey;
 
 public class ClientHandler implements Runnable {
     private Socket socket;
+    private PublicKey serverPublicKey;
+    private PrivateKey serverPrivateKey;
+    private PublicKey clientPublicKey;
+    private SecretKey aesKey;
+    private String username;
     private BufferedReader reader;
-    private PrintWriter writer;
-    private Set<ClientHandler> clients;
+    private BufferedWriter writer;
 
-    private byte[] aesKey; // Store AES key per client
-
-    public ClientHandler(Socket socket, Set<ClientHandler> clients) throws IOException {
+    public ClientHandler(Socket socket, KeyPair serverKeyPair) {
         this.socket = socket;
-        this.clients = clients;
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        writer = new PrintWriter(socket.getOutputStream(), true);
+        this.serverPublicKey = serverKeyPair.getPublic();
+        this.serverPrivateKey = serverKeyPair.getPrivate();
     }
 
+    public void sendMessage(String message) throws Exception {
+        String encrypted = AESEncryption.encrypt(message, aesKey);
+        String hmac = HMACUtil.generateHMAC(encrypted, aesKey);
+        String signature = SignatureUtil.sign(message, serverPrivateKey);
+
+        writer.write(encrypted + "::" + hmac + "::" + signature);
+        writer.newLine();
+        writer.flush();
+    }
+
+    @Override
     public void run() {
         try {
-            // 🔐 Step 1: Send RSA public key to client
-            String publicKeyBase64 = RSAUtil.getPublicKeyAsBase64();
-            writer.println(publicKeyBase64); // client reads this first
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
 
-            // 🔐 Step 2: Receive encrypted AES key from client
-            String encryptedAESKeyBase64 = reader.readLine();
-            byte[] encryptedAESKey = Base64.getDecoder().decode(encryptedAESKeyBase64);
+            // Send server public key
+            writer.write(Base64.getEncoder().encodeToString(serverPublicKey.getEncoded()));
+            writer.newLine();
+            writer.flush();
 
-            // 🔐 Step 3: Decrypt AES key using RSA private key
-            aesKey = RSAUtil.decryptWithPrivateKey(encryptedAESKey);
+            // Receive client's public key
+            String clientPubKeyStr = reader.readLine();
+            clientPublicKey = RSAUtil.getPublicKeyFromBase64(clientPubKeyStr);
 
-            // ✅ Proceed with login using AES
-            writer.println("Enter username:");
-            String encryptedUsername = reader.readLine();
-            String username = AESEncryption.decrypt(encryptedUsername, aesKey);
+            // Authenticate user
+            writer.write("Enter username:");
+            writer.newLine();
+            writer.flush();
+            String username = reader.readLine();
 
-            writer.println("Enter password:");
-            String encryptedPassword = reader.readLine();
-            String password = AESEncryption.decrypt(encryptedPassword, aesKey);
+            writer.write("Enter password:");
+            writer.newLine();
+            writer.flush();
+            String password = reader.readLine();
 
             if (!UserAuth.authenticate(username, password)) {
-                writer.println("Authentication failed. Connection closed.");
+                writer.write("Authentication failed.");
+                writer.newLine();
+                writer.flush();
                 socket.close();
                 return;
             }
 
-            writer.println("Login successful. Welcome to the chat!");
-            broadcast("[ENC]" + AESEncryption.encrypt(username + " has joined the chat.", aesKey));
+            this.username = username;
+            ChatServer.clients.put(username, this);
 
-            String message;
-            while ((message = reader.readLine()) != null) {
-                String decryptedMessage = AESEncryption.decrypt(message, aesKey);
-                broadcast("[ENC]" + AESEncryption.encrypt(username + ": " + decryptedMessage, aesKey));
+            writer.write("Login successful. Welcome to the chat!");
+            writer.newLine();
+            writer.flush();
+            System.out.println(username + " has joined the chat.");
+
+            // Receive AES key encrypted with server's public key
+            String encAESKey = reader.readLine();
+            aesKey = RSAUtil.decryptAESKey(encAESKey, serverPrivateKey);
+
+            // Broadcast to others
+            for (ClientHandler client : ChatServer.clients.values()) {
+                if (!client.username.equals(this.username)) {
+                    client.sendMessage(this.username + " has joined the chat.");
+                }
+            }
+
+            String input;
+            while ((input = reader.readLine()) != null) {
+                String[] parts = input.split("::");
+                if (parts.length != 3) continue;
+
+                String encrypted = parts[0];
+                String hmac = parts[1];
+                String signature = parts[2];
+
+                if (!HMACUtil.verifyHMAC(encrypted, aesKey, hmac)) {
+                    System.out.println("HMAC verification failed.");
+                    continue;
+                }
+
+                String decrypted = AESEncryption.decrypt(encrypted, aesKey);
+
+                if (!SignatureUtil.verify(decrypted, signature, clientPublicKey)) {
+                    System.out.println("Signature verification failed.");
+                    continue;
+                }
+
+                // System.out.println(username + ": " + decrypted);
+
+                for (ClientHandler client : ChatServer.clients.values()) {
+                    if (!client.username.equals(this.username)) {
+                        client.sendMessage(this.username + ": " + decrypted);
+                    }
+                }
             }
 
         } catch (Exception e) {
-            System.out.println("Client disconnected: " + socket);
+            System.out.println("Client disconnected: " + username);
         } finally {
-            try {
-                socket.close();
-            } catch (IOException ignored) {}
-        }
-    }
-
-    private void broadcast(String message) {
-        for (ClientHandler client : clients) {
-            client.writer.println(message);
+            ChatServer.clients.remove(username);
         }
     }
 }

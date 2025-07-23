@@ -1,33 +1,34 @@
 package util;
 
-import java.security.*;
-import java.util.Base64;
 import javax.crypto.Cipher;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.*;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Base64;
 
 public class RSAUtil {
-    private static KeyPair keyPair;
-
-    // Generate the RSA Key Pair (once during server startup)
-    public static void generateKeyPair() throws NoSuchAlgorithmException {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
-        generator.initialize(2048); // 2048-bit key
-        keyPair = generator.generateKeyPair();
+    public static KeyPair generateKeyPair() throws Exception {
+        KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+        gen.initialize(2048);
+        return gen.generateKeyPair();
     }
 
-    // Get RSA Public Key (to send to client)
-    public static PublicKey getPublicKey() {
-        return keyPair.getPublic();
+    public static PublicKey getPublicKeyFromBase64(String base64) throws Exception {
+        byte[] bytes = Base64.getDecoder().decode(base64);
+        return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(bytes));
     }
 
-    // Get RSA Public Key as Base64 string
-    public static String getPublicKeyAsBase64() {
-        return Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded());
-    }
-
-    // Decrypt AES key using RSA private key
-    public static byte[] decryptWithPrivateKey(byte[] encryptedData) throws Exception {
+    public static String encryptAESKey(SecretKey aesKey, PublicKey publicKey) throws Exception {
         Cipher cipher = Cipher.getInstance("RSA");
-        cipher.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
-        return cipher.doFinal(encryptedData);
+        cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+        return Base64.getEncoder().encodeToString(cipher.doFinal(aesKey.getEncoded()));
+    }
+
+    public static SecretKey decryptAESKey(String encrypted, PrivateKey privateKey) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privateKey);
+        byte[] decoded = cipher.doFinal(Base64.getDecoder().decode(encrypted));
+        return new SecretKeySpec(decoded, 0, decoded.length, "AES");
     }
 }
