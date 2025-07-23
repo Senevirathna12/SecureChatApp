@@ -3,12 +3,18 @@ package server;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.Base64;
+
+import util.AESEncryption;
+import util.RSAUtil;
 
 public class ClientHandler implements Runnable {
     private Socket socket;
     private BufferedReader reader;
     private PrintWriter writer;
     private Set<ClientHandler> clients;
+
+    private byte[] aesKey; // Store AES key per client
 
     public ClientHandler(Socket socket, Set<ClientHandler> clients) throws IOException {
         this.socket = socket;
@@ -17,42 +23,44 @@ public class ClientHandler implements Runnable {
         writer = new PrintWriter(socket.getOutputStream(), true);
     }
 
-
     public void run() {
         try {
-        	writer.println("Enter username:"); // Sent to client
-        	String encryptedUsername = reader.readLine(); // Read encrypted
-        	String username = util.AESEncryption.decrypt(encryptedUsername); // Decrypt
+            // 🔐 Step 1: Send RSA public key to client
+            String publicKeyBase64 = RSAUtil.getPublicKeyAsBase64();
+            writer.println(publicKeyBase64); // client reads this first
 
-        	// System.out.println("Received username : " + encryptedUsername); 
-        	// System.out.println("Received username (decrypted): " + username);
+            // 🔐 Step 2: Receive encrypted AES key from client
+            String encryptedAESKeyBase64 = reader.readLine();
+            byte[] encryptedAESKey = Base64.getDecoder().decode(encryptedAESKeyBase64);
 
-        	writer.println("Enter password:"); // Sent to client
-        	String encryptedPassword = reader.readLine(); // Read encrypted
-        	String password = util.AESEncryption.decrypt(encryptedPassword); // Decrypt
+            // 🔐 Step 3: Decrypt AES key using RSA private key
+            aesKey = RSAUtil.decryptWithPrivateKey(encryptedAESKey);
 
-        	// System.out.println("Received password : " + encryptedPassword); 
-        	// System.out.println("Received password (decrypted): " + password);
-        	
-        	// Now authenticate with decrypted values
-        	if (!UserAuth.authenticate(username, password)) {
-        	    writer.println("Authentication failed. Connection closed.");
-        	    socket.close();
-        	    return;
-        	}
+            // ✅ Proceed with login using AES
+            writer.println("Enter username:");
+            String encryptedUsername = reader.readLine();
+            String username = AESEncryption.decrypt(encryptedUsername, aesKey);
 
-        	writer.println("Login successful. Welcome to the chat!");
-        	broadcast("[ENC]" + util.AESEncryption.encrypt(username + " has joined the chat."));
+            writer.println("Enter password:");
+            String encryptedPassword = reader.readLine();
+            String password = AESEncryption.decrypt(encryptedPassword, aesKey);
 
-        	String message;
-        	while ((message = reader.readLine()) != null) {
-        	    String decryptedMessage = util.AESEncryption.decrypt(message); // Decrypt incoming message
-        	    // System.out.println("Received (decrypted): " + decryptedMessage);
-        	    broadcast("[ENC]" + util.AESEncryption.encrypt(username + ": " + decryptedMessage)); // Encrypt and tag
-        	}
+            if (!UserAuth.authenticate(username, password)) {
+                writer.println("Authentication failed. Connection closed.");
+                socket.close();
+                return;
+            }
 
+            writer.println("Login successful. Welcome to the chat!");
+            broadcast("[ENC]" + AESEncryption.encrypt(username + " has joined the chat.", aesKey));
 
-        } catch (IOException e) {
+            String message;
+            while ((message = reader.readLine()) != null) {
+                String decryptedMessage = AESEncryption.decrypt(message, aesKey);
+                broadcast("[ENC]" + AESEncryption.encrypt(username + ": " + decryptedMessage, aesKey));
+            }
+
+        } catch (Exception e) {
             System.out.println("Client disconnected: " + socket);
         } finally {
             try {

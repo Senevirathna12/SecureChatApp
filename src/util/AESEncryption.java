@@ -6,11 +6,11 @@ import java.util.Base64;
 
 public class AESEncryption {
     private static final String ALGORITHM = "AES";
-    private static final String SECRET_KEY = "1234567890123456"; // 16-byte key
 
-    public static String encrypt(String plainText) {
+    //  Encrypt using provided AES key
+    public static String encrypt(String plainText, byte[] aesKey) {
         try {
-            SecretKeySpec key = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
+            SecretKeySpec key = new SecretKeySpec(aesKey, ALGORITHM);
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.ENCRYPT_MODE, key);
             byte[] encrypted = cipher.doFinal(plainText.getBytes());
@@ -21,9 +21,10 @@ public class AESEncryption {
         }
     }
 
-    public static String decrypt(String encryptedText) {
+    //  Decrypt using provided AES key
+    public static String decrypt(String encryptedText, byte[] aesKey) {
         try {
-            SecretKeySpec key = new SecretKeySpec(SECRET_KEY.getBytes(), ALGORITHM);
+            SecretKeySpec key = new SecretKeySpec(aesKey, ALGORITHM);
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, key);
             byte[] decoded = Base64.getDecoder().decode(encryptedText);
