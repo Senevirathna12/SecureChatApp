@@ -19,6 +19,21 @@ public class RSAUtil {
         return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(bytes));
     }
 
+    // Encrypt byte array with RSA public key
+    public static byte[] encrypt(byte[] data, PublicKey publicKey) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+        return cipher.doFinal(data);
+    }
+
+    // Decrypt byte array with RSA private key
+    public static String decrypt(byte[] data, PrivateKey privateKey) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privateKey);
+        byte[] decrypted = cipher.doFinal(data);
+        return new String(decrypted);
+    }
+
     public static String encryptAESKey(SecretKey aesKey, PublicKey publicKey) throws Exception {
         Cipher cipher = Cipher.getInstance("RSA");
         cipher.init(Cipher.ENCRYPT_MODE, publicKey);

@@ -3,6 +3,7 @@ package util;
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.util.Base64;
 
 public class AESEncryption {
@@ -22,5 +23,16 @@ public class AESEncryption {
         Cipher cipher = Cipher.getInstance("AES");
         cipher.init(Cipher.DECRYPT_MODE, key);
         return new String(cipher.doFinal(Base64.getDecoder().decode(cipherText)));
+    }
+
+    // Convert AES key to Base64 string
+    public static String getBase64FromKey(SecretKey key) {
+        return Base64.getEncoder().encodeToString(key.getEncoded());
+    }
+
+    // Convert Base64 string back to AES key
+    public static SecretKey getKeyFromBase64(String base64Key) {
+        byte[] decoded = Base64.getDecoder().decode(base64Key);
+        return new SecretKeySpec(decoded, 0, decoded.length, "AES");
     }
 }
