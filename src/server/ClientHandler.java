@@ -30,7 +30,7 @@ public class ClientHandler implements Runnable {
     public void sendMessage(String message) throws Exception {
         String encrypted = AESEncryption.encrypt(message, aesKey);
         String hmac = HMACUtil.generateHMAC(encrypted, aesKey);
-        String signature = SignatureUtil.sign(message, serverPrivateKey);
+        String signature = SignatureUtil.sign(encrypted, serverPrivateKey);
 
         writer.write(encrypted + "::" + hmac + "::" + signature);
         writer.newLine();
@@ -161,7 +161,7 @@ public class ClientHandler implements Runnable {
                 String decrypted = AESEncryption.decrypt(encrypted, aesKey); // this is "msg::timestamp"
 
                 // Step 3: Verify signature
-                if (!SignatureUtil.verify(decrypted, signature2, clientPublicKey)) {
+                if (!SignatureUtil.verify(encrypted, signature2, clientPublicKey)) {
                     System.out.println("Signature verification failed.");
                     continue;
                 }
@@ -188,7 +188,14 @@ public class ClientHandler implements Runnable {
                     System.out.println("Replay attack or delayed message detected. Ignored.");
                     continue;
                 }
-
+                
+                System.out.println("Message: "+ message);
+                System.out.println("AES Key: " + Base64.getEncoder().encodeToString(aesKey.getEncoded()));
+                System.out.println("Timestamp: "+ timestamp);
+                System.out.println("Encriped Msg: " +encrypted );
+                System.out.println("hmac : "+ hmac);
+                System.out.println("signature: "+ signature2);
+                
                 // Step 6: Broadcast to others
                 for (ClientHandler client : ChatServer.clients.values()) {
                     if (!client.username.equals(this.username)) {

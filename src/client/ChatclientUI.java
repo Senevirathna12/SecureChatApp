@@ -143,7 +143,7 @@ public class ChatclientUI extends JFrame {
 
             String encrypted = AESEncryption.encrypt(msgWithTime, aesKey);
             String hmac = HMACUtil.generateHMAC(encrypted, aesKey);
-            String signature = SignatureUtil.sign(msgWithTime, clientKeyPair.getPrivate());
+            String signature = SignatureUtil.sign(encrypted, clientKeyPair.getPrivate());
 
             writer.write(encrypted + "::" + hmac + "::" + signature);
             writer.newLine();
@@ -174,7 +174,7 @@ public class ChatclientUI extends JFrame {
                 }
 
                 String decrypted = AESEncryption.decrypt(encrypted, aesKey);
-                if (!SignatureUtil.verify(decrypted, signature, serverPublicKey)) {
+                if (!SignatureUtil.verify(encrypted, signature, serverPublicKey)) {
                     appendToChat("⚠ Signature verification failed.");
                     continue;
                 }

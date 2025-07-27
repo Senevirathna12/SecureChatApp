@@ -106,7 +106,7 @@ public class ChatClient {
 				            }
 
 				            String decryptedMsg = AESEncryption.decrypt(encrypted, aesKey);
-				            if (!SignatureUtil.verify(decryptedMsg, signature2, serverPublicKey)) {
+				            if (!SignatureUtil.verify(encrypted, signature2, serverPublicKey)) {
 				                System.out.println("[!] Signature check failed.");
 				                continue;
 				            }
@@ -126,7 +126,7 @@ public class ChatClient {
 
 				    String encrypted = AESEncryption.encrypt(payload, aesKey);
 				    String hmac = HMACUtil.generateHMAC(encrypted, aesKey);
-				    String signature2 = SignatureUtil.sign(payload, clientKeyPair.getPrivate());
+				    String signature2 = SignatureUtil.sign(encrypted, clientKeyPair.getPrivate());
 
 				    writer.write(encrypted + "::" + hmac + "::" + signature2);
 				    writer.newLine();
